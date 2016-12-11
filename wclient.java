@@ -147,11 +147,12 @@ static public void main(String args[]) {
     }
         // The following is for you to do:
         // check port, packet size, type, block, etc
-        // latch on to port, if block == 1
+        // ==============latch on to port, if block == 1===========================================
         if (expected_block==1) {
 	        latchport = replyDG.getPort();
 	        ackDG.setPort(latchport);
 	        }
+	//========================== block = 1, then latched onto port (latchport) ================
         // send ack
 		
         ack = wp.new ACK(wumppkt.BUMPPROTO, expected_block);
@@ -165,7 +166,7 @@ static public void main(String args[]) {
         }
         sendtime = System.currentTimeMillis();
 
-      // sanity checks:
+      //================================ sanity checks:============================================
         if (replyDG.getPort() != latchport) {
 			System.err.println("Packet received from invalid port");
 			// Send error packet
@@ -193,14 +194,15 @@ static public void main(String args[]) {
 		if (data.blocknum() != expected_block) {
 			continue; // Wrong block number
 		}
-
+	//=========================== End of Sanity Checks ==========================================
     // if it passes all the checks:
         //write data, increment expected_block
     // exit if data size is < 512
-        expected_block++;
+        // =========incremented block size and exit for length less than 512 ========================
+	expected_block++;
         if (length < 512) {
         	break;
-        	
+        //===========================================================================================	
         }
        
     } // while
