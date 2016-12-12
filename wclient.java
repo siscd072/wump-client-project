@@ -93,7 +93,14 @@ static public void main(String args[]) {
 
     //============================================================
     while (true) {
-        // get packet
+	try {
+	    s.send(ackDG);
+	}
+        catch (IOException ioe) {
+            System.err.println("send() failed");
+            return;
+        }
+        sendtime = System.currentTimeMillis();            // get packet
         try {
             s.receive(replyDG);
         }
@@ -155,16 +162,7 @@ static public void main(String args[]) {
 	//========================== block = 1, then latched onto port (latchport) ================
         // send ack
 		
-        ack = wp.new ACK(wumppkt.BUMPPROTO, expected_block);
-        ackDG.setData(ack.write());
-        ackDG.setLength(ack.size());
         
-        try {s.send(ackDG);}
-        catch (IOException ioe) {
-            System.err.println("send() failed");
-            return;
-        }
-        sendtime = System.currentTimeMillis();
 
       //================================ sanity checks:============================================
         if (replyDG.getPort() != latchport) {
@@ -199,6 +197,19 @@ static public void main(String args[]) {
         //write data, increment expected_block
     // exit if data size is < 512
         // =========incremented block size and exit for length less than 512 ========================
+	ack = wp.new ACK(wumppkt.BUMPPROTO, expected_block);
+        ackDG.setData(ack.write());
+        ackDG.setLength(ack.size());
+        
+        try {s.send(ackDG);}
+        catch (IOException ioe) {
+            System.err.println("send() failed");
+            return;
+        }
+        sendtime = System.currentTimeMillis();    
+	    
+	System.out.write(data);    
+	    
 	expected_block++;
         if (length < 512) {
         	break;
