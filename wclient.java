@@ -1,7 +1,7 @@
 /*
 WUMP (specifically BUMP) in java. starter file
 */
-import java.lang.*;     //pld
+//import java.lang.*;     //pld
 import java.net.*;      //pld
 import java.io.*;
 //import wumppkt;         // be sure wumppkt.java is in your current directory
@@ -9,7 +9,10 @@ import java.io.*;
 
 public class wclient {
 
-static wumppkt wp = new wumppkt();    // stupid inner-class nonsense
+	public static final long TIMEOUT = 3000;
+	public static final int DALLY = 2;
+	
+	static wumppkt wp = new wumppkt();    // stupid inner-class nonsense
 
 //============================================================
 //============================================================
@@ -17,7 +20,7 @@ static wumppkt wp = new wumppkt();    // stupid inner-class nonsense
 static public void main(String args[]) {
     int destport = wumppkt.SERVERPORT;
     destport = wumppkt.SAMEPORT;		// 4716; server responds from same port
-    String filename = "vanilla";
+    String filename = "spray";
     String desthost = "ulam.cs.luc.edu";
     int winsize = 1;
     int latchport = 0;
@@ -90,25 +93,39 @@ static public void main(String args[]) {
     int proto;        // for proto of incoming packets
     int opcode;
     int length;
-
+    int timeoutCount = 0;
+    boolean isDally = false;
+    
     //============================================================
     while (true) {
-	try {
-	    s.send(ackDG);
-	}
-        catch (IOException ioe) {
-            System.err.println("send() failed");
-            return;
-        }
-        sendtime = System.currentTimeMillis();            // get packet
+    	if ((System.currentTimeMillis() - sendtime ) >= TIMEOUT ) {
+    		  try {s.send(ackDG);
+    		  
+    		  }
+  	        catch (IOException ioe) {
+  	            System.err.println("send() failed");
+  	            return;
+  	        }
+    		  sendtime = System.currentTimeMillis();
+    	}
+    	
+        // get packet
         try {
             s.receive(replyDG);
         }
         catch (SocketTimeoutException ste) {
 			System.err.println("hard timeout");
+			timeoutCount++;
+			// Check for dally
+			if (isDally && timeoutCount >= DALLY) {
+            	System.err.println("Exiting after " + DALLY + " timeouts...");
+            	break;
 			// what do you do here??
+			
+        }
 			continue;
         }
+			
         catch (IOException ioe) {
             System.err.println("receive() failed");
             return;
@@ -118,7 +135,7 @@ static public void main(String args[]) {
         proto = wumppkt.proto(replybuf);
         opcode = wumppkt.opcode(replybuf);
         length = replyDG.getLength();
-
+      
 
         /* The new packet might not actually be a DATA packet.
          * But we can still build one and see, provided:
@@ -135,9 +152,47 @@ static public void main(String args[]) {
         } else {
         		data = null;
     }
-
+    if (data.blocknum()==1) {
+        latchport = replyDG.getPort();
+        //ackDG.setPort(latchport);
+        }
   
+ // Check IP address
+ 			if (!replyDG.getAddress().getHostAddress().equals(dest.getHostAddress())) {
+ 			System.err.println("Packet received from invalid host");
+ 				continue;
+ 			}
+ 			
+    if (expected_block > 1 && replyDG.getPort() != latchport) {
+		System.err.println("Packet received from invalid port");
+		// Send error packet
+		wumppkt.ERROR err = wp.new ERROR(wumppkt.BUMPPROTO, (short) wumppkt.EBADPORT);
+		DatagramPacket errDG = new  DatagramPacket(err.write(), err.size());
+		try {
+			s.send(errDG);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		continue;
+	}
+	// check packet size
+	if (replyDG.getLength() <= wumppkt.DHEADERSIZE) {
+		System.err.println("packet size is too small");
+		continue;
+	}
+	// Check for opcode
+	if (opcode != wumppkt.DATAop) {
+		System.err.println("Invalid operation");
+		continue;
+	}
+				
+	// Check block number
+	if (data.blocknum() != expected_block) {
+		expected_block++;
+		continue; // Wrong block number
+	}
 		// the following seven items we can print always
+    
         System.err.print("rec'd packet: len=" + length);
         System.err.print("; proto=" + proto);
         System.err.print("; opcode=" + opcode);
@@ -150,76 +205,51 @@ static public void main(String args[]) {
         	System.err.println("packet does not seem to be a data packet");
         else {
         	System.err.println("         DATA packet blocknum = " + data.blocknum());
-	System.out.write(data.data(), 0, data.size() - wumppkt.DHEADERSIZE);
+	
     }
         // The following is for you to do:
         // check port, packet size, type, block, etc
-        // ==============latch on to port, if block == 1===========================================
-        if (expected_block==1) {
-	        latchport = replyDG.getPort();
-	        ackDG.setPort(latchport);
-	        }
-	//========================== block = 1, then latched onto port (latchport) ================
+        // latch on to port, if block == 1
+      
+       
         // send ack
-		
+      
+       
+
+      // sanity checks:
         
 
-      //================================ sanity checks:============================================
-        if (replyDG.getPort() != latchport) {
-			System.err.println("Packet received from invalid port");
-			// Send error packet
-			wumppkt.ERROR err = wp.new ERROR(wumppkt.BUMPPROTO, (short) wumppkt.EBADPORT);
-			DatagramPacket errDG = new  DatagramPacket(err.write(), err.size());
-			try {
-				s.send(errDG);
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			continue;
-		}
-		// check packet size
-		if (replyDG.getLength() <= wumppkt.DHEADERSIZE) {
-			System.err.println("packet size is too small");
-			continue;
-		}
-		// Check for opcode
-		if (opcode != wumppkt.DATAop) {
-			System.err.println("Invalid operation");
-			continue;
-		}
-					
-		// Check block number
-		if (data.blocknum() != expected_block) {
-			continue; // Wrong block number
-		}
-	//=========================== End of Sanity Checks ==========================================
     // if it passes all the checks:
         //write data, increment expected_block
     // exit if data size is < 512
-        // =========incremented block size and exit for length less than 512 ========================
-	ack = wp.new ACK(wumppkt.BUMPPROTO, expected_block);
-        ackDG.setData(ack.write());
-        ackDG.setLength(ack.size());
-        
-        try {s.send(ackDG);}
-        catch (IOException ioe) {
-            System.err.println("send() failed");
-            return;
-        }
-        sendtime = System.currentTimeMillis();    
-	    
-	System.out.write(data);    
-	    
-	expected_block++;
+		  ack = wp.new ACK(wumppkt.BUMPPROTO, expected_block);
+	        ackDG.setData(ack.write());
+	        ackDG.setLength(ack.size());
+	        ackDG.setPort(latchport);
+	        try {s.send(ackDG);}
+	        catch (IOException ioe) {
+	            System.err.println("send() failed");
+	            return;
+	        }
+	        sendtime = System.currentTimeMillis();
+	        
+		System.out.write(data.data(), 0, data.size() - wumppkt.DHEADERSIZE);
+		
+		
         if (length < 512) {
+        // ((data.size() - wumppkt.DHEADERSIZE) < 512) {
+        	expected_block++;
+        	isDally = true;
         	break;
-        //===========================================================================================	
+        	
         }
        
-    } // while
-  
+        
+    }
+   // s.close();  
+} // while
 
-}
+
 
 // extracts blocknum from raw packet
 // blocknum is laid out in big-endian order in b[4]..b[7]
